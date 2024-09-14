@@ -6,8 +6,9 @@ import os
 from std_msgs.msg import String
 from ament_index_python.packages import get_package_share_directory
 import requests
-from tutorial_interfaces.msg import InforSevt, Token, LocationSent
-from tutorial_interfaces.srv import LocationAsk
+from robot_interfaces.msg import InforSevt, Token, LocationSent, MissionTransport
+from robot_interfaces.srv import CreatMission, SearchStock, ExcuteMission
+from example_interfaces.srv import AddTwoInts
 
 # from rclpy_message_converter import message_converter
 
@@ -23,14 +24,17 @@ class ServerControl(Node):
         self.pub_location_value = self.create_publisher(
             LocationSent, "stock_location", 10
         )
-        self.mission_transport_goods = self.create_publisher(
-            Token, "mission_transport_goods", 10
+        self._transport_goods = self.create_publisher(
+            MissionTransport, "transport_goods", 10
+        )
+        self._transport_empty_cart = self.create_publisher(
+            MissionTransport, "transport_empty_cart", 10
         )
 
         timer_period = 0.5  # seconds
         self.timer = self.create_timer(timer_period, self.loop_timer)
-        # self.declare_parameter("username", "admin")
-        # self.declare_parameter("password", "admin")
+        self.timer_query_mission = self.create_timer(10, self.mission_timer)
+
         self.key_token = False
         self.token = ""
         self.harsh_token = ""
@@ -39,11 +43,17 @@ class ServerControl(Node):
             get_package_share_directory("amd_sevtsv"), "config", "simul_robot.json"
         )
         self.config_file = self.load_config(config_path)
-        self.srv_location_available = self.create_service(
-            LocationAsk, "check_location_available", self.manifest_location_srv
-        )
-
         self._url = self.config_file["url"]
+
+        self.srv_new_mission = self.create_service(
+            CreatMission, "creation_mission", self.creat_mission_srv
+        )
+        self.srv_search_empty_cart = self.create_service(
+            SearchStock, "search_empty_cart", self.search_location_srv
+        )
+        self.srv_process_excute_mission = self.create_service(
+            ExcuteMission, "processing_excute_mission", self.excute_misison_srv
+        )
 
     def loop_timer(self):
 
@@ -55,8 +65,12 @@ class ServerControl(Node):
         # mx = self.searching_information_db("excute_mission/transport_goods")
         # self.get_logger().info('Publishing: "%s"' % mx)
         # self.get_logger().info("minh dep trai - ---")
+        # self.tracking_system_mission()
         self.pub_infor.publish(self.load_infor_server())
         self.pub_location_value.publish(self.pub_demo_location())
+
+    def mission_timer(self):
+        self.tracking_system_mission()
 
     def mockup_status(self):
         request_body = {
@@ -146,12 +160,76 @@ class ServerControl(Node):
         except Exception as e:
             return None
 
+    def tracking_system_mission(self):
+
+        mission_transport = self.res_mission_excute(
+            self.searching_information_db("excute_mission/transport_goods")
+        )
+        mission_empty_cart = self.res_mission_excute(
+            self.searching_information_db("excute_mission/transport_empty_cart")
+        )
+
+        self._transport_empty_cart.publish(mission_empty_cart)
+        self._transport_goods.publish(mission_transport)
+
+    def res_mission_excute(self, response):
+        msg = MissionTransport()
+        msg.excute_code = response["excute_code"]
+        msg.mission_type = response["mission_type"]
+        msg.mission_excute = response["mission_excute"]
+        msg.mission_next = response["mission_next"]
+        return msg
+
+    def search_location_srv(self, request, response):
+        req_api = self.searching_information_db(request.url)
+        if not req_api or len(req_api) == 0:
+            response.name = ""
+            response.map_code = ""
+            response.code = 0
+            return response
+
+        response.name = req_api[0]["name"]
+        response.map_code = req_api[0]["map_code"]
+        response.code = 1
+        # response.name = "Asdasdas"
+        # response.map_code = "asdasdasd"
+        return response
+
+    def creat_mission_srv(self, request, response):
+        # response.sum = request.a + request.b
+        # self.get_logger().info('I heard: "%s"' % request.location_code)
+        # self.get_logger().info('I heard: "%s"' % request.map_code)
+        # self.get_logger().info('I heard: "%s"' % request.occupy_code)
+        request_db = {
+            "entry_location": {
+                "location_code": request.entry_location.location_code,
+                "map_code": request.entry_location.map_code,
+            },
+            "end_location": {
+                "location_code": request.end_location.location_code,
+                "map_code": request.end_location.map_code,
+            },
+        }
+        response_api = self.post_data_to_database("creat_mission", request_db)
+        self.get_logger().info('I heard: "%s"' % response_api)
+        response.mission_code = response_api["mission_code"]
+        response.msg = str(response_api["mission_state"])
+        return response
+
+    def excute_misison_srv(self, request, response):
+        request_db = {
+            "excute_code": request.excute_code,
+            "mission_excute": request.value,
+        }
+        response_api = self.patch_data_to_database(request.url, request_db)
+        self.get_logger().info('response_api: "%s"' % response_api)
+        response.code = "1"
+        return response
+
     def searching_information_db(self, url):
         # self.get_logger().info("minh dep trai - ---")
         try:
-            res = requests.get(
-                "http://127.0.0.1:8000/" + url, headers=self.token, timeout=3
-            )
+            res = requests.get(self._url + url, headers=self.token, timeout=3)
             response_restapi = res.json()
             # print("response_restapi", response_restapi)
             # self.get_logger().info('funtion here: "%s"' % response_restapi)
@@ -162,33 +240,35 @@ class ServerControl(Node):
             print("error update status mission")
         return False
 
-    def tracking_system_mission_srv(self, request, response):
-        track = self.searching_information_db(request.url_track)
-        # p
-
-    def manifest_location_srv(self, request, response):
-        # response.sum = request.a + request.b
-        self.get_logger().info('I heard: "%s"' % request.location_code)
-        self.get_logger().info('I heard: "%s"' % request.map_code)
-        self.get_logger().info('I heard: "%s"' % request.occupy_code)
-        request_db = {
-            "location_code": request.location_code,
-            "map_code": request.map_code,
-            "occupy_code": request.occupy_code,
-        }
+    def post_data_to_database(self, url, value):
         try:
             res = requests.post(
-                self._url + "manifest_location",
-                json=request_db,
+                self._url + url,
+                json=value,
+                headers=self.token,
                 timeout=3,
             )
-            response_restapi = res.json()
-            response.code = response_restapi["code"]
-            response.msg = response_restapi["msg"]
+
+            response_post_data = res.json()
+            return response_post_data
         except Exception as e:
             print("error update status mission")
-        return response
-        # pass
+        return False
+
+    def patch_data_to_database(self, url, value):
+        try:
+            res = requests.patch(
+                self._url + url,
+                json=value,
+                headers=self.token,
+                timeout=3,
+            )
+
+            response_post_data = res.json()
+            return response_post_data
+        except Exception as e:
+            print("error update status mission")
+        return False
 
 
 def main(args=None):

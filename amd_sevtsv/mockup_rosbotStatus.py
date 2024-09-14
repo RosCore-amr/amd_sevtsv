@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from tutorial_interfaces.msg import InforSevt, Token, LocationStock
+from robot_interfaces.msg import InforSevt, Token, LocationStock
 import requests
 from datetime import datetime, timedelta, timezone
 import ast

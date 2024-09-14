@@ -31,6 +31,7 @@ setup(
         "console_scripts": [
             "query_db = amd_sevtsv.query_db:main",
             "mockup = amd_sevtsv.mockup_rosbotStatus:main",
+            "mission = amd_sevtsv.mission_call:main",
         ],
     },
 )
