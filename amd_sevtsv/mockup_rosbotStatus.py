@@ -175,9 +175,6 @@ def main(args=None):
     mockup_test = MockupControl()
     rclpy.spin(mockup_test)
 
-    # Destroy the node explicitly
-    # (optional - otherwise it will be done automatically
-    # when the garbage collector destroys the node object)
     mockup_test.destroy_node()
     rclpy.shutdown()
 

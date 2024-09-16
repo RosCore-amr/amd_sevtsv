@@ -23,6 +23,14 @@ def generate_launch_description():
         parameters=[config],
     )
 
+    mission_control_node = Node(
+        package="amd_sevtsv",
+        # namespace="minhdeptria",
+        executable="mission_control",
+        # name="sim",
+        # parameters=[config],
+    )
+
     # mockup_node = Node(
     #     package="amd_sevtsv",
     #     # namespace="minhdeptria",
@@ -31,4 +39,4 @@ def generate_launch_description():
     #     # parameters=[config],
     # )
 
-    return LaunchDescription([servercontrol_node])
+    return LaunchDescription([servercontrol_node, mission_control_node])

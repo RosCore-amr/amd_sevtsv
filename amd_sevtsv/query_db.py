@@ -7,7 +7,13 @@ from std_msgs.msg import String
 from ament_index_python.packages import get_package_share_directory
 import requests
 from robot_interfaces.msg import InforSevt, Token, LocationSent, MissionTransport
-from robot_interfaces.srv import CreatMission, SearchStock, ExcuteMission
+from robot_interfaces.srv import (
+    CreatMission,
+    SearchStock,
+    ExcuteMission,
+    CommandApi,
+    GetInformation,
+)
 from example_interfaces.srv import AddTwoInts
 
 # from rclpy_message_converter import message_converter
@@ -21,6 +27,10 @@ class ServerControl(Node):
         super().__init__("ServerSEVT")
         self.publisher_ = self.create_publisher(Token, "token", 10)
         self.pub_infor = self.create_publisher(InforSevt, "infor_value", 10)
+        self.pub_standard_robot_status = self.create_publisher(
+            String, "robot_status", 10
+        )
+
         self.pub_location_value = self.create_publisher(
             LocationSent, "stock_location", 10
         )
@@ -33,7 +43,7 @@ class ServerControl(Node):
 
         timer_period = 0.5  # seconds
         self.timer = self.create_timer(timer_period, self.loop_timer)
-        self.timer_query_mission = self.create_timer(10, self.mission_timer)
+        self.timer_query_mission = self.create_timer(4, self.auto_publish_status)
 
         self.key_token = False
         self.token = ""
@@ -43,7 +53,7 @@ class ServerControl(Node):
             get_package_share_directory("amd_sevtsv"), "config", "simul_robot.json"
         )
         self.config_file = self.load_config(config_path)
-        self._url = self.config_file["url"]
+        self._url = str(self.config_file["url"])
 
         self.srv_new_mission = self.create_service(
             CreatMission, "creation_mission", self.creat_mission_srv
@@ -55,6 +65,16 @@ class ServerControl(Node):
             ExcuteMission, "processing_excute_mission", self.excute_misison_srv
         )
 
+        self.srv_robot_update = self.create_service(
+            CommandApi, "update_data_database", self.standard_robot_status_srv
+        )
+        self.srv_update_location_req = self.create_service(
+            CommandApi, "update_location_req", self.update_status_location_srv
+        )
+        self.srv_get_mission = self.create_service(
+            GetInformation, "get_mission_current", self.mission_current_srv
+        )
+
     def loop_timer(self):
 
         self.publisher_.publish(self.load_token())
@@ -62,39 +82,14 @@ class ServerControl(Node):
             self.get_logger().error("SEVER NOT WORKING")
             exit()
 
-        # mx = self.searching_information_db("excute_mission/transport_goods")
-        # self.get_logger().info('Publishing: "%s"' % mx)
-        # self.get_logger().info("minh dep trai - ---")
-        # self.tracking_system_mission()
         self.pub_infor.publish(self.load_infor_server())
         self.pub_location_value.publish(self.pub_demo_location())
 
-    def mission_timer(self):
+    def auto_publish_status(self):
         self.tracking_system_mission()
-
-    def mockup_status(self):
-        request_body = {
-            "robot_name": "robot_1",
-            "battery": 100,
-            "status": "ide",
-            "mission": "",
-            "type": "amr",
-        }
-        self.get_logger().info('funtion here: "%s"' % type(self.token))
-
-        try:
-            # self.get_logger().info(self._url)
-            url = "http://192.168.1.6:8000/update_robotStatus"
-            res = requests.patch(
-                url,
-                headers=self.token,
-                json=request_body,
-                timeout=3,
-            )
-            response = res.json()
-        except Exception as e:
-            self.get_logger().info(e)
-            return None
+        self.pub_standard_robot_status.publish(
+            self.pub_robot_status(self.get_data_to_database("all_robot"))
+        )
 
     def load_token(self):
         msg = Token()
@@ -162,17 +157,17 @@ class ServerControl(Node):
 
     def tracking_system_mission(self):
 
-        mission_transport = self.res_mission_excute(
-            self.searching_information_db("excute_mission/transport_goods")
+        mission_transport = self.pub_mission_excute(
+            self.get_data_to_database("excute_mission/transport_goods")
         )
-        mission_empty_cart = self.res_mission_excute(
-            self.searching_information_db("excute_mission/transport_empty_cart")
+        mission_empty_cart = self.pub_mission_excute(
+            self.get_data_to_database("excute_mission/transport_empty_cart")
         )
 
         self._transport_empty_cart.publish(mission_empty_cart)
         self._transport_goods.publish(mission_transport)
 
-    def res_mission_excute(self, response):
+    def pub_mission_excute(self, response):
         msg = MissionTransport()
         msg.excute_code = response["excute_code"]
         msg.mission_type = response["mission_type"]
@@ -180,8 +175,13 @@ class ServerControl(Node):
         msg.mission_next = response["mission_next"]
         return msg
 
+    def pub_robot_status(self, response):
+        msg = String()
+        msg.data = str(response)
+        return msg
+
     def search_location_srv(self, request, response):
-        req_api = self.searching_information_db(request.url)
+        req_api = self.get_data_to_database(request.url)
         if not req_api or len(req_api) == 0:
             response.name = ""
             response.map_code = ""
@@ -191,15 +191,11 @@ class ServerControl(Node):
         response.name = req_api[0]["name"]
         response.map_code = req_api[0]["map_code"]
         response.code = 1
-        # response.name = "Asdasdas"
-        # response.map_code = "asdasdasd"
+
         return response
 
     def creat_mission_srv(self, request, response):
-        # response.sum = request.a + request.b
-        # self.get_logger().info('I heard: "%s"' % request.location_code)
-        # self.get_logger().info('I heard: "%s"' % request.map_code)
-        # self.get_logger().info('I heard: "%s"' % request.occupy_code)
+
         request_db = {
             "entry_location": {
                 "location_code": request.entry_location.location_code,
@@ -216,6 +212,25 @@ class ServerControl(Node):
         response.msg = str(response_api["mission_state"])
         return response
 
+    def mission_current_srv(self, request, response):
+        response_api = self.get_data_to_database(request.url)
+        response.msg_response = str(response_api)
+        return response
+
+    def update_status_location_srv(self, request, response):
+        response_api = self.patch_data_to_database(
+            request.url, eval(request.msg_request)
+        )
+        response.msg_response = str(response_api)
+        return response
+
+    def standard_robot_status_srv(self, request, response):
+        response_api = self.patch_data_to_database(
+            request.url, eval(request.msg_request)
+        )
+        response.msg_response = str(response_api)
+        return response
+
     def excute_misison_srv(self, request, response):
         request_db = {
             "excute_code": request.excute_code,
@@ -226,8 +241,7 @@ class ServerControl(Node):
         response.code = "1"
         return response
 
-    def searching_information_db(self, url):
-        # self.get_logger().info("minh dep trai - ---")
+    def get_data_to_database(self, url):
         try:
             res = requests.get(self._url + url, headers=self.token, timeout=3)
             response_restapi = res.json()
@@ -256,15 +270,18 @@ class ServerControl(Node):
         return False
 
     def patch_data_to_database(self, url, value):
+        # self.get_logger().info('_url: "%s"' % str(self._url + url))
+        # self.get_logger().info('value: "%s"' % str(value))
+
         try:
             res = requests.patch(
-                self._url + url,
-                json=value,
+                str(self._url + url),
+                json=(value),
                 headers=self.token,
                 timeout=3,
             )
-
             response_post_data = res.json()
+            self.get_logger().info('response_api: "%s"' % str(self._url + url))
             return response_post_data
         except Exception as e:
             print("error update status mission")
