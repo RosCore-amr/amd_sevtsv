@@ -49,16 +49,26 @@ class MissionRequestControl(Node):
         self.msg_mission_current = MissionCurrent()
 
     def transport_goods_callback(self, msg):
-        self._mission_next_transport_goods = msg.mission_next
+
+        # self._mission_next_transport_goods = msg.mission_next
         self.time_transport_callback = datetime.now(timezone.utc) + timedelta(seconds=5)
-        if len(self._mission_next_transport_goods) == 0:
+        if len(msg.mission_excute) == 0:
             self._mission_next_transport_goods = "1"
+        else:
+            self._mission_next_transport_goods = msg.mission_excute[0]
 
     def transport_empty_cart_callback(self, msg):
-        self._mission_next_transport_empty_cart = msg.mission_next
-        if len(self._mission_next_transport_empty_cart) == 0:
+        # self.get_logger().info(msg.mission_excute)
+
+        if len(msg.mission_excute) == 0:
             self._mission_next_transport_empty_cart = "1"
-        # pass
+        else:
+            self._mission_next_transport_empty_cart = msg.mission_excute[0]
+
+        # self.get_logger().info(
+        #     '_mission_next_transport_empty_cart: "%s"'
+        #     % (self._mission_next_transport_empty_cart)
+        # )
 
     def main_loop(self):
         # msg = String()

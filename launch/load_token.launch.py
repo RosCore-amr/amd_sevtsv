@@ -39,4 +39,4 @@ def generate_launch_description():
     #     # parameters=[config],
     # )
 
-    return LaunchDescription([servercontrol_node, mission_control_node])
+    return LaunchDescription([servercontrol_node])

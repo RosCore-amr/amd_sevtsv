@@ -172,7 +172,7 @@ class ServerControl(Node):
         msg.excute_code = response["excute_code"]
         msg.mission_type = response["mission_type"]
         msg.mission_excute = response["mission_excute"]
-        msg.mission_next = response["mission_next"]
+        # msg.mission_next = response["mission_next"]
         return msg
 
     def pub_robot_status(self, response):
