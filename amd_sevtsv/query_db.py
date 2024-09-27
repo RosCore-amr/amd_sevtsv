@@ -59,7 +59,7 @@ class ServerControl(Node):
             CreatMission, "creation_mission", self.creat_mission_srv
         )
         self.srv_search_empty_cart = self.create_service(
-            SearchStock, "search_empty_cart", self.search_location_srv
+            GetInformation, "search_empty_cart", self.search_location_srv
         )
         self.srv_process_excute_mission = self.create_service(
             ExcuteMission, "processing_excute_mission", self.excute_misison_srv
@@ -182,32 +182,36 @@ class ServerControl(Node):
 
     def search_location_srv(self, request, response):
         req_api = self.get_data_to_database(request.url)
-        if not req_api or len(req_api) == 0:
-            response.name = ""
-            response.map_code = ""
-            response.code = 0
-            return response
+        # self.get_logger().info('I heard: "%s"' % req_api)
+        # if not req_api or len(req_api) == 0:
+        #     response.name = ""
+        #     response.map_code = ""
+        #     response.code = 0
+        #     return response
 
-        response.name = req_api[0]["name"]
-        response.map_code = req_api[0]["map_code"]
-        response.code = 1
+        # response.name = req_api[0]["name"]
+        # response.map_code = req_api[0]["map_code"]
+        # response.code = 1
+        response.msg_response = str(req_api)
+        # self.get_logger().info('I heard: "%s"' % response.msg_response)
 
         return response
 
     def creat_mission_srv(self, request, response):
 
-        request_db = {
-            "entry_location": {
-                "location_code": request.entry_location.location_code,
-                "map_code": request.entry_location.map_code,
-            },
-            "end_location": {
-                "location_code": request.end_location.location_code,
-                "map_code": request.end_location.map_code,
-            },
-        }
+        # request_db = {
+        #     "entry_location": {
+        #         "location_code": request.entry_location.location_code,
+        #         "map_code": request.entry_location.map_code,
+        #     },
+        #     "end_location": {
+        #         "location_code": request.end_location.location_code,
+        #         "map_code": request.end_location.map_code,
+        #     },
+        # }
+        request_db = eval(request.mission_request)
         response_api = self.post_data_to_database("creat_mission", request_db)
-        self.get_logger().info('I heard: "%s"' % response_api)
+        # self.get_logger().info('I heard: "%s"' % response_api)
         response.mission_code = response_api["mission_code"]
         response.msg = str(response_api["mission_state"])
         return response
@@ -237,7 +241,7 @@ class ServerControl(Node):
             "mission_excute": request.value,
         }
         response_api = self.patch_data_to_database(request.url, request_db)
-        self.get_logger().info('response_api: "%s"' % response_api)
+        # self.get_logger().info('response_api: "%s"' % response_api)
         response.code = "1"
         return response
 
@@ -281,7 +285,7 @@ class ServerControl(Node):
                 timeout=3,
             )
             response_post_data = res.json()
-            self.get_logger().info('response_api: "%s"' % str(self._url + url))
+            # self.get_logger().info('response_api: "%s"' % str(self._url + url))
             return response_post_data
         except Exception as e:
             print("error update status mission")

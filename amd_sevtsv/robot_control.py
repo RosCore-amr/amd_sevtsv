@@ -4,7 +4,7 @@
 
 import rclpy
 from rclpy.node import Node
-from robot_interfaces.srv import SearchStock, CommandApi
+from robot_interfaces.srv import CommandApi
 from std_msgs.msg import String
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
