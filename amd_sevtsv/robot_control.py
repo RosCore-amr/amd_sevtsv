@@ -4,7 +4,7 @@
 
 import rclpy
 from rclpy.node import Node
-from robot_interfaces.srv import CommandApi
+from robot_interfaces.srv import CommandApi, GetInformation
 from std_msgs.msg import String
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
@@ -27,18 +27,21 @@ class RobotControlSystem(Node):
         self.timer_cb = MutuallyExclusiveCallbackGroup()
 
         self.timer = self.create_timer(
-            5.0, self.main_loop, callback_group=self.timer_cb
+            1.0, self.main_loop, callback_group=self.timer_cb
+        )
+        self.pub_robot_ability_workl_ = self.create_publisher(
+            String, "robot_work_ability", 10
         )
 
         timer_period = 0.5  # seconds
         self.timer = self.create_timer(timer_period, self.loop_timer)
-        self.subscriber_ = self.create_subscription(
-            String, "robot_status", self.robot_status_callback, 1
+        self.cli_data_update_status = self.create_client(
+            CommandApi, "update_data_database"
         )
-        self.cli_robot_update_status = self.create_client(
-            CommandApi, "update_standard_robot_status"
-        )
-        self.response_all_robot = {}
+
+        self.cli_get2system = self.create_client(GetInformation, "get_from_system")
+        self.dict_robot_work = {}
+        # self.list_robot_work = []
 
     def calc_diff(self, time_start, time_end):
 
@@ -51,48 +54,89 @@ class RobotControlSystem(Node):
         return True
         return d_start - d_end
 
-    def update_status_robot(self, response):
-
-        self.get_logger().info('result : "%s"' % (response))
+    def processing_update_client(self, _url, request_body):
 
         req = CommandApi.Request()
-        while not self.cli_robot_update_status.wait_for_service(timeout_sec=1.0):
+        while not self.cli_data_update_status.wait_for_service(timeout_sec=1.0):
             self.get_logger().info("service not available, waiting again...")
             return False
 
-        req.url = "update_robotStatus"
-        req.msg_request = str(response)
-        future = self.cli_robot_update_status.call_async(req)
+        req.url = _url
+        req.msg_request = str(request_body)
+        future = self.cli_data_update_status.call_async(req)
         while rclpy.ok():
             if future.done() and future.result():
                 return future.result()
 
         return None
 
-    def robot_status_callback(self, msg):
-        self.response_all_robot = eval(msg.data)
+    def get_inform_system_client(self, _url):
+        req = GetInformation.Request()
+        while not self.cli_get2system.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info("service not available, waiting again...")
+            return False
+
+        req.url = _url
+        future = self.cli_get2system.call_async(req)
+        while rclpy.ok():
+            if future.done() and future.result():
+                return future.result()
+        return None
+
+    def pub_robot_status(self, response):
+        msg = String()
+        msg.data = str(response)
+        return msg
+
+    def consider_ability_robot(self, robot):
+        self.dict_robot_work.update(robot)
+        self.pub_robot_ability_workl_.publish(
+            self.pub_robot_status(self.dict_robot_work)
+        )
+        # self.get_logger().info(
+        #     'dict_robot_work: "%s"' % self.msg2json(self.dict_robot_work)
+        # )
 
     def robot_status_processing(self, response_all_robot):
+        list_robot_work = list(self.dict_robot_work.keys())
+
         try:
             for i in range(len(response_all_robot)):
-                robot_time = response_all_robot[i]["lastUpdate"]["date"]["$date"]
+
+                robot_time = response_all_robot[i]["lastAT"]["$date"]
                 robot_datetime_obj = (dateutil.parser.parse(robot_time)).strftime(
                     "%Y-%m-%d %H:%M:%S.%f"
                 )
-                # self.get_logger().info(f"robot_datetime_obj data: {robot_datetime_obj}")
-
                 if not self.calc_diff(robot_datetime_obj, self.expire_now):
-                    if response_all_robot[i]["status"] != 0:
+                    if response_all_robot[i]["robot_connect"]:
                         _robot_update_status = {
-                            "robot_code": response_all_robot[i]["robot_code"],
-                            "status": 0,
+                            "ip_machine": response_all_robot[i]["ip_machine"],
+                            "robot_connect": False,
+                            "map_code": "minhdeptrai",
                         }
-                        update_status = self.update_status_robot(_robot_update_status)
+                        update_status = self.processing_update_client(
+                            "update_robotStatus", _robot_update_status
+                        )
                         robot_code_update = eval(update_status.msg_response)
-                        # self.get_logger().info(
-                        #     '_robot_update_status : "%s"' % (robot_code_update)
-                        # )
+                        self.get_logger().info(
+                            '_robot_update_status : "%s"' % (robot_code_update)
+                        )
                         return robot_code_update
+
+                # self.get_logger().info('list_robot_work : "%s"' % (list_robot_work))
+
+                if not response_all_robot[i]["robot_connect"]:
+                    _dict_robot = {
+                        response_all_robot[i]["ip_machine"]: {
+                            "robot_code": response_all_robot[i]["robot_code"],
+                            "map_code": response_all_robot[i]["map_code"],
+                            "robot_status": response_all_robot[i]["robot_status"],
+                        }
+                    }
+                    self.consider_ability_robot(_dict_robot)
+                else:
+                    if response_all_robot[i]["ip_machine"] in list_robot_work:
+                        self.dict_robot_work.pop(response_all_robot[i]["ip_machine"])
 
             return True
 
@@ -101,20 +145,21 @@ class RobotControlSystem(Node):
             return None
 
     def loop_timer(self):
-        self.expire_now = (datetime.now() - timedelta(minutes=1)).strftime(
-            "%Y-%m-%d %H:%M:%S.%f"
-        )
-        self.get_logger().info('time end : "%s"' % (self.expire_now))
+        # self.get_logger().info("loop run")
+        pass
 
     def main_loop(self) -> None:
 
-        # if self.query_mission_take_cart_empty:
-        #     new_mission_code = self.creat_mission_take_empty_cart()
-        #     self.get_logger().info(str(new_mission_code))
-        process = self.robot_status_processing(self.response_all_robot)
-        self.get_logger().info('response_all_robot end : "%s"' % (process))
+        self.expire_now = (datetime.now() - timedelta(seconds=40)).strftime(
+            "%Y-%m-%d %H:%M:%S.%f"
+        )
+        _robot_status = self.get_inform_system_client("all_robot")
+        list_robot_status = eval(_robot_status.msg_response)
+        self.robot_status_processing(list_robot_status)
 
-        self.get_logger().info("loop run")
+    def msg2json(self, msg):
+        # y = json.load(str(msg))
+        return json.dumps(msg, indent=4)
 
 
 def main(args=None):

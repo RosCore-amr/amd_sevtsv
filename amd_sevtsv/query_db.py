@@ -27,23 +27,10 @@ class ServerControl(Node):
         super().__init__("ServerSEVT")
         self.publisher_ = self.create_publisher(Token, "token", 10)
         self.pub_infor = self.create_publisher(InforSevt, "infor_value", 10)
-        self.pub_standard_robot_status = self.create_publisher(
-            String, "robot_status", 10
-        )
-
-        self.pub_location_value = self.create_publisher(
-            LocationSent, "stock_location", 10
-        )
-        self._transport_goods = self.create_publisher(
-            MissionTransport, "transport_goods", 10
-        )
-        self._transport_empty_cart = self.create_publisher(
-            MissionTransport, "transport_empty_cart", 10
-        )
 
         timer_period = 0.5  # seconds
         self.timer = self.create_timer(timer_period, self.loop_timer)
-        self.timer_query_mission = self.create_timer(4, self.auto_publish_status)
+        # self.timer_query_mission = self.create_timer(1, self.auto_publish_status)
 
         self.key_token = False
         self.token = ""
@@ -75,6 +62,10 @@ class ServerControl(Node):
             GetInformation, "get_mission_current", self.mission_current_srv
         )
 
+        self.srv_get_inform2database = self.create_service(
+            GetInformation, "get_from_system", self.get2system_srv
+        )
+
     def loop_timer(self):
 
         self.publisher_.publish(self.load_token())
@@ -82,14 +73,13 @@ class ServerControl(Node):
             self.get_logger().error("SEVER NOT WORKING")
             exit()
 
+        # self.auto_publish_status()
         self.pub_infor.publish(self.load_infor_server())
-        self.pub_location_value.publish(self.pub_demo_location())
+        # self.pub_location_value.publish(self.pub_demo_location())
 
-    def auto_publish_status(self):
-        self.tracking_system_mission()
-        self.pub_standard_robot_status.publish(
-            self.pub_robot_status(self.get_data_to_database("all_robot"))
-        )
+    # def auto_publish_status(self):
+    #     self.tracking_system_mission()
+    # self.get_logger().error(" pub lish auto")
 
     def load_token(self):
         msg = Token()
@@ -100,14 +90,6 @@ class ServerControl(Node):
 
         msg.bearer = str(self.token)
         msg.harsh = str(self.harsh_token)
-        return msg
-
-    def pub_demo_location(self):
-        msg = LocationSent()
-        msg.entry_location.location_code = "zone4"
-        msg.entry_location.map_code = "pickup_location"
-        msg.end_location.location_code = "zone9"
-        msg.end_location.map_code = "return_location"
         return msg
 
     def load_infor_server(self):
@@ -155,31 +137,6 @@ class ServerControl(Node):
         except Exception as e:
             return None
 
-    def tracking_system_mission(self):
-
-        mission_transport = self.pub_mission_excute(
-            self.get_data_to_database("excute_mission/transport_goods")
-        )
-        mission_empty_cart = self.pub_mission_excute(
-            self.get_data_to_database("excute_mission/transport_empty_cart")
-        )
-
-        self._transport_empty_cart.publish(mission_empty_cart)
-        self._transport_goods.publish(mission_transport)
-
-    def pub_mission_excute(self, response):
-        msg = MissionTransport()
-        msg.excute_code = response["excute_code"]
-        msg.mission_type = response["mission_type"]
-        msg.mission_excute = response["mission_excute"]
-        # msg.mission_next = response["mission_next"]
-        return msg
-
-    def pub_robot_status(self, response):
-        msg = String()
-        msg.data = str(response)
-        return msg
-
     def search_location_srv(self, request, response):
         req_api = self.get_data_to_database(request.url)
         # self.get_logger().info('I heard: "%s"' % req_api)
@@ -214,6 +171,11 @@ class ServerControl(Node):
         # self.get_logger().info('I heard: "%s"' % response_api)
         response.mission_code = response_api["mission_code"]
         response.msg = str(response_api["mission_state"])
+        return response
+
+    def get2system_srv(self, request, response):
+        response_api = self.get_data_to_database(request.url)
+        response.msg_response = str(response_api)
         return response
 
     def mission_current_srv(self, request, response):
