@@ -91,13 +91,16 @@ class MissionRequestControl(Node):
         current_misison_response = eval(current_misison_infor.msg_response)
 
         # self.get_logger().info(
-        #     'current_misison_response: "%s"' % current_misison_response
+        #     'current_misison_response: "%s"' % current_misison_response["mission_state"]
         # )
 
-        # _url_pop = "missions_excute_pop"
-        # request_pop = {"excute_code": _excute_code}
-        # if not int(current_misison_response["code"]):
-        #     self.processing_update_client(_url_pop, request_pop)
+        _url_pop = "missions_excute_pop"
+        request_pop = {"excute_code": _excute_code}
+        if (
+            not int(current_misison_response["code"])
+            or current_misison_response["mission_state"] != 1
+        ):
+            self.processing_update_client(_url_pop, request_pop)
 
         return str(current_misison_response)
 
@@ -129,7 +132,7 @@ class MissionRequestControl(Node):
                 return future.result()
         return None
 
-    def get_inform_system_client(self, _url):
+    def find_bulletin_system_client(self, _url):
         req = GetInformation.Request()
         while not self.cli_get2system.wait_for_service(timeout_sec=1.0):
             self.get_logger().info("service not available, waiting again...")
@@ -144,7 +147,7 @@ class MissionRequestControl(Node):
 
     def tracking_system_mission(self, task_code):
         _url_task_code = "excute_mission/" + task_code
-        mission_transport = self.get_inform_system_client(_url_task_code)
+        mission_transport = self.find_bulletin_system_client(_url_task_code)
         _mission_transport = eval(mission_transport.msg_response)
         # return _mission_transport
         # self.get_logger().info('_mission_transport: "%s"' % _mission_transport)
