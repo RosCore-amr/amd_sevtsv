@@ -90,6 +90,7 @@ class ServerControl(Node):
 
         msg.bearer = str(self.token)
         msg.harsh = str(self.harsh_token)
+        msg.server_work = True
         return msg
 
     def load_infor_server(self):

@@ -155,6 +155,7 @@ class RobotControlSystem(Node):
         )
         _robot_status = self.get_inform_system_client("all_robot")
         list_robot_status = eval(_robot_status.msg_response)
+        # self.get_logger().info('list_robot_status: "%s"' % list_robot_status)
         self.robot_status_processing(list_robot_status)
 
     def msg2json(self, msg):
