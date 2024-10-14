@@ -6,6 +6,9 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 
 
+package_name = "amd_sevtsv"
+
+
 def generate_launch_description():
     # rviz_config = os.path.join(
     #     get_package_share_directory("turtle_tf2_py"), "rviz", "turtle_rviz.rviz"
@@ -16,7 +19,7 @@ def generate_launch_description():
     # print("config", config)
 
     servercontrol_node = Node(
-        package="amd_sevtsv",
+        package=package_name,
         # namespace="minhdeptria",
         executable="query_db",
         # name="sim",
@@ -24,7 +27,7 @@ def generate_launch_description():
     )
 
     mission_control_node = Node(
-        package="amd_sevtsv",
+        package=package_name,
         # namespace="minhdeptria",
         executable="mission_control",
         # name="sim",
